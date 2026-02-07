@@ -1,4 +1,4 @@
-# VisionClaw
+# VisionClaw 🦞+😎
 
 A real-time AI assistant for Meta Ray-Ban smart glasses. See what you see, hear what you say, and take actions on your behalf -- all through voice.
 
