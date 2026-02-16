@@ -80,6 +80,10 @@ This will:
 
 **See:** [docs/INSTALL_FROM_LINUX.md](docs/INSTALL_FROM_LINUX.md) for detailed guide.
 
+### Android (Preview)
+
+A native Android app (Kotlin + Jetpack Compose) is in **samples/CameraAccessAndroid**. It uses the same Gemini Live API and OpenClaw protocol. Build with Gradle (requires a GitHub token for the Meta Wearables DAT dependency). See [samples/CameraAccessAndroid/README.md](samples/CameraAccessAndroid/README.md) and [docs/ANDROID_BUILD_PLAN.md](docs/ANDROID_BUILD_PLAN.md).
+
 ---
 
 ### Development Setup (macOS Required)
