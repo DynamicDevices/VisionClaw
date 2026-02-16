@@ -2,6 +2,9 @@ package com.dynamicdevices.visionclaw.ui
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
+import com.dynamicdevices.visionclaw.ui.screens.HomeScreen
+import com.dynamicdevices.visionclaw.ui.screens.SettingsScreen
+import com.dynamicdevices.visionclaw.ui.screens.StreamScreen
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController

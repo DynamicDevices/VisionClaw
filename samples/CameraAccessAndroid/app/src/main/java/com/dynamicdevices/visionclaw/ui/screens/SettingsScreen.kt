@@ -20,9 +20,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.ExperimentalMaterial3Api
 import com.dynamicdevices.visionclaw.gemini.GeminiConfig
 import com.dynamicdevices.visionclaw.settings.SettingsProvider
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     var apiKey by rememberSaveable { mutableStateOf(SettingsProvider.geminiApiKey) }

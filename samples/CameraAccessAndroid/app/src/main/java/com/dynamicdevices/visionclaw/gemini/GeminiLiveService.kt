@@ -250,7 +250,12 @@ class GeminiLiveService {
                 GeminiFunctionCall(
                     id = c.optString("id", ""),
                     name = c.optString("name", ""),
-                    args = c.optJSONObject("args")?.keySet()?.associateWith { c.opt(it) } ?: emptyMap()
+                    args = c.optJSONObject("args")?.let { argsObj ->
+                    val keys = mutableListOf<String>()
+                    val iter = argsObj.keys()
+                    while (iter.hasNext()) keys.add(iter.next())
+                    keys.associateWith { argsObj.opt(it) }
+                } ?: emptyMap()
                 )
             }
             onToolCall?.invoke(GeminiToolCall(list))
