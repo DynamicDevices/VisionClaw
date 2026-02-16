@@ -1,1 +1,13 @@
 .DS_Store
+
+# Build artifacts
+*.ipa
+*.dSYM
+
+# QR code images
+*.png
+!assets/*.png
+
+# Python
+__pycache__/
+*.pyc

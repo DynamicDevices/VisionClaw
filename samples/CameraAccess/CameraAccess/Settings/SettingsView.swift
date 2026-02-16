@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 struct SettingsView: View {
   @Environment(\.dismiss) private var dismiss
@@ -12,6 +13,9 @@ struct SettingsView: View {
   @State private var geminiSystemPrompt: String = ""
   @State private var webrtcSignalingURL: String = ""
   @State private var showResetConfirmation = false
+  @State private var showQRScanner = false
+  @State private var showQRSuccess = false
+  @State private var qrSuccessMessage = ""
 
   var body: some View {
     NavigationView {
@@ -26,15 +30,33 @@ struct SettingsView: View {
               .disableAutocorrection(true)
               .font(.system(.body, design: .monospaced))
           }
+
+          Button {
+            showQRScanner = true
+          } label: {
+            HStack {
+              Image(systemName: "qrcode.viewfinder")
+              Text("Scan QR Code for Config")
+            }
+          }
         }
 
-        Section(header: Text("System Prompt"), footer: Text("Customize the AI assistant's behavior and personality. Changes take effect on the next Gemini session.")) {
+        Section(
+          header: Text("System Prompt"),
+          footer: Text(
+            "Customize the AI assistant's behavior and personality. " +
+            "Changes take effect on the next Gemini session."
+          )
+        ) {
           TextEditor(text: $geminiSystemPrompt)
             .font(.system(.body, design: .monospaced))
             .frame(minHeight: 200)
         }
 
-        Section(header: Text("OpenClaw"), footer: Text("Connect to an OpenClaw gateway running on your Mac for agentic tool-calling.")) {
+        Section(
+          header: Text("OpenClaw"),
+          footer: Text("Connect to an OpenClaw gateway running on your Mac for agentic tool-calling.")
+        ) {
           VStack(alignment: .leading, spacing: 4) {
             Text("Host")
               .font(.caption)
@@ -121,6 +143,16 @@ struct SettingsView: View {
       } message: {
         Text("This will reset all settings to the values built into the app.")
       }
+      .alert("QR Code Scanned", isPresented: $showQRSuccess) {
+        Button("OK", role: .cancel) {}
+      } message: {
+        Text(qrSuccessMessage)
+      }
+      .sheet(isPresented: $showQRScanner) {
+        QRCodeScannerView { qrCode in
+          handleScannedQRCode(qrCode)
+        }
+      }
       .onAppear {
         loadCurrentValues()
       }
@@ -147,5 +179,75 @@ struct SettingsView: View {
     settings.openClawHookToken = openClawHookToken.trimmingCharacters(in: .whitespacesAndNewlines)
     settings.openClawGatewayToken = openClawGatewayToken.trimmingCharacters(in: .whitespacesAndNewlines)
     settings.webrtcSignalingURL = webrtcSignalingURL.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private func handleScannedQRCode(_ qrCode: String) {
+    // Try to parse as JSON
+    guard let data = qrCode.data(using: .utf8) else {
+      importPlainAPIKey(qrCode)
+      return
+    }
+
+    do {
+      if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        importFromJSON(json)
+      } else {
+        importPlainAPIKey(qrCode)
+      }
+    } catch {
+      importPlainAPIKey(qrCode)
+    }
+  }
+
+  private func importPlainAPIKey(_ key: String) {
+    geminiAPIKey = key
+    qrSuccessMessage = "Gemini API key imported"
+    showQRSuccess = true
+  }
+
+  private func importFromJSON(_ json: [String: Any]) {
+    var updatedFields: [String] = []
+
+    if let key = json["geminiAPIKey"] as? String, !key.isEmpty {
+      geminiAPIKey = key
+      updatedFields.append("Gemini API Key")
+    }
+
+    if let host = json["openClawHost"] as? String, !host.isEmpty {
+      openClawHost = host
+      updatedFields.append("OpenClaw Host")
+    }
+
+    if let port = json["openClawPort"] as? Int {
+      openClawPort = String(port)
+      updatedFields.append("OpenClaw Port")
+    }
+
+    if let token = json["openClawHookToken"] as? String, !token.isEmpty {
+      openClawHookToken = token
+      updatedFields.append("OpenClaw Hook Token")
+    }
+
+    if let token = json["openClawGatewayToken"] as? String, !token.isEmpty {
+      openClawGatewayToken = token
+      updatedFields.append("OpenClaw Gateway Token")
+    }
+
+    if let url = json["webrtcSignalingURL"] as? String, !url.isEmpty {
+      webrtcSignalingURL = url
+      updatedFields.append("WebRTC Signaling URL")
+    }
+
+    if let prompt = json["geminiSystemPrompt"] as? String, !prompt.isEmpty {
+      geminiSystemPrompt = prompt
+      updatedFields.append("Gemini System Prompt")
+    }
+
+    if updatedFields.isEmpty {
+      qrSuccessMessage = "No valid configuration found in QR code"
+    } else {
+      qrSuccessMessage = "Imported: \(updatedFields.joined(separator: ", "))"
+    }
+    showQRSuccess = true
   }
 }

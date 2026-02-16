@@ -1,0 +1,63 @@
+# SwiftLint Configuration for VisionClaw
+# https://github.com/realm/SwiftLint
+#
+# Pragmatic configuration for inherited codebase
+# Focus on catching serious issues, not stylistic preferences
+
+# Paths to include during linting
+included:
+  - samples/CameraAccess/CameraAccess
+
+# Paths to exclude during linting
+excluded:
+  - Carthage
+  - Pods
+  - samples/CameraAccess/CameraAccess.xcodeproj
+  - samples/CameraAccess/CameraAccessTests
+  - samples/CameraAccess/build
+  - samples/CameraAccess/DerivedData
+
+# Rules to disable (inherited code patterns)
+disabled_rules:
+  - trailing_whitespace       # Git handles whitespace
+  - trailing_comma            # Trailing commas are fine in Swift
+  - opening_brace             # Flexible brace positioning
+  - multiple_closures_with_trailing_closure  # Common SwiftUI pattern
+  - identifier_name           # Allow short names in loops/closures
+  - line_length               # Too restrictive for existing code
+  - function_body_length      # Some functions legitimately complex
+  - cyclomatic_complexity     # State machines naturally complex
+  - type_body_length          # ViewModels can be large
+  - unused_closure_parameter  # Parameters can document intent
+
+# Rules to enable (opt-in rules that add value)
+opt_in_rules:
+  - empty_count                      # Prefer isEmpty over count == 0
+  - first_where                      # Use .first(where:) over .filter{}.first
+  - sorted_first_last                # Use .sorted().first over .min()
+
+# Rule configurations for enabled rules
+file_length:
+  warning: 600
+  error: 1000
+
+nesting:
+  type_level:
+    warning: 3
+  function_level:
+    warning: 4
+
+type_name:
+  min_length: 3
+  max_length: 60
+
+# Custom rules (focus on serious issues only)
+custom_rules:
+  no_print:
+    name: "No print statements"
+    regex: '(?<!//)\bprint\('
+    message: "Use NSLog instead of print for proper system logging"
+    severity: warning
+
+# Reporter type
+reporter: "github-actions-logging"

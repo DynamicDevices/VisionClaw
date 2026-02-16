@@ -24,90 +24,18 @@ class GeminiSessionViewModel: ObservableObject {
     guard !isGeminiActive else { return }
 
     guard GeminiConfig.isConfigured else {
-      errorMessage = "Gemini API key not configured. Open GeminiConfig.swift and replace YOUR_GEMINI_API_KEY with your key from https://aistudio.google.com/apikey"
+      errorMessage = "Gemini API key not configured. Open Settings and add your key from aistudio.google.com/apikey"
       return
     }
 
     isGeminiActive = true
 
-    // Wire audio callbacks
-    audioManager.onAudioCaptured = { [weak self] data in
-      guard let self else { return }
-      Task { @MainActor in
-        // iPhone mode: mute mic while model speaks to prevent echo feedback
-        // (loudspeaker + co-located mic overwhelms iOS echo cancellation)
-        if self.streamingMode == .iPhone && self.geminiService.isModelSpeaking { return }
-        self.geminiService.sendAudio(data: data)
-      }
-    }
-
-    geminiService.onAudioReceived = { [weak self] data in
-      self?.audioManager.playAudio(data: data)
-    }
-
-    geminiService.onInterrupted = { [weak self] in
-      self?.audioManager.stopPlayback()
-    }
-
-    geminiService.onTurnComplete = { [weak self] in
-      guard let self else { return }
-      Task { @MainActor in
-        // Clear user transcript when AI finishes responding
-        self.userTranscript = ""
-      }
-    }
-
-    geminiService.onInputTranscription = { [weak self] text in
-      guard let self else { return }
-      Task { @MainActor in
-        self.userTranscript += text
-        self.aiTranscript = ""
-      }
-    }
-
-    geminiService.onOutputTranscription = { [weak self] text in
-      guard let self else { return }
-      Task { @MainActor in
-        self.aiTranscript += text
-      }
-    }
-
-    // Handle unexpected disconnection
-    geminiService.onDisconnected = { [weak self] reason in
-      guard let self else { return }
-      Task { @MainActor in
-        guard self.isGeminiActive else { return }
-        self.stopSession()
-        self.errorMessage = "Connection lost: \(reason ?? "Unknown error")"
-      }
-    }
-
-    // Check OpenClaw connectivity and start fresh session
+    wireGeminiCallbacks()
     await openClawBridge.checkConnection()
     openClawBridge.resetSession()
-
-    // Wire tool call handling
     toolCallRouter = ToolCallRouter(bridge: openClawBridge)
+    wireToolCallHandling()
 
-    geminiService.onToolCall = { [weak self] toolCall in
-      guard let self else { return }
-      Task { @MainActor in
-        for call in toolCall.functionCalls {
-          self.toolCallRouter?.handleToolCall(call) { [weak self] response in
-            self?.geminiService.sendToolResponse(response)
-          }
-        }
-      }
-    }
-
-    geminiService.onToolCallCancellation = { [weak self] cancellation in
-      guard let self else { return }
-      Task { @MainActor in
-        self.toolCallRouter?.cancelToolCalls(ids: cancellation.ids)
-      }
-    }
-
-    // Observe service state
     stateObservation = Task { [weak self] in
       guard let self else { return }
       while !Task.isCancelled {
@@ -159,6 +87,64 @@ class GeminiSessionViewModel: ObservableObject {
       isGeminiActive = false
       connectionState = .disconnected
       return
+    }
+  }
+
+  private func wireGeminiCallbacks() {
+    audioManager.onAudioCaptured = { [weak self] data in
+      guard let self else { return }
+      Task { @MainActor in
+        if self.streamingMode == .iPhone && self.geminiService.isModelSpeaking { return }
+        self.geminiService.sendAudio(data: data)
+      }
+    }
+    geminiService.onAudioReceived = { [weak self] data in
+      self?.audioManager.playAudio(data: data)
+    }
+    geminiService.onInterrupted = { [weak self] in
+      self?.audioManager.stopPlayback()
+    }
+    geminiService.onTurnComplete = { [weak self] in
+      guard let self else { return }
+      Task { @MainActor in self.userTranscript = "" }
+    }
+    geminiService.onInputTranscription = { [weak self] text in
+      guard let self else { return }
+      Task { @MainActor in
+        self.userTranscript += text
+        self.aiTranscript = ""
+      }
+    }
+    geminiService.onOutputTranscription = { [weak self] text in
+      guard let self else { return }
+      Task { @MainActor in self.aiTranscript += text }
+    }
+    geminiService.onDisconnected = { [weak self] reason in
+      guard let self else { return }
+      Task { @MainActor in
+        guard self.isGeminiActive else { return }
+        self.stopSession()
+        self.errorMessage = "Connection lost: \(reason ?? "Unknown error")"
+      }
+    }
+  }
+
+  private func wireToolCallHandling() {
+    geminiService.onToolCall = { [weak self] toolCall in
+      guard let self else { return }
+      Task { @MainActor in
+        for call in toolCall.functionCalls {
+          self.toolCallRouter?.handleToolCall(call) { [weak self] response in
+            self?.geminiService.sendToolResponse(response)
+          }
+        }
+      }
+    }
+    geminiService.onToolCallCancellation = { [weak self] cancellation in
+      guard let self else { return }
+      Task { @MainActor in
+        self.toolCallRouter?.cancelToolCalls(ids: cancellation.ids)
+      }
     }
   }
 

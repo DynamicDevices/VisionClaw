@@ -1,0 +1,229 @@
+name: iOS Build & Validation
+
+on:
+  push:
+    branches:
+      - '**'  # Build on every branch
+  pull_request:
+    branches:
+      - main
+
+env:
+  XCODE_PROJECT: samples/CameraAccess/CameraAccess.xcodeproj
+  XCODE_SCHEME: CameraAccess
+  XCODE_DESTINATION: 'generic/platform=iOS'  # Build for any iOS device
+
+jobs:
+  build:
+    name: Build & Validate iOS App
+    runs-on: macos-15  # Use macOS 15 with Xcode 16
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Select Xcode Version
+        run: |
+          # Use default Xcode (latest available on runner)
+          xcodebuild -version
+          swift --version
+      
+      - name: Create Secrets.swift for CI Build
+        run: |
+          cat > samples/CameraAccess/CameraAccess/Secrets.swift << 'EOF'
+          //
+          // Secrets.swift
+          // Auto-generated for CI builds - contains placeholder values only
+          //
+          // For local development: Copy this file and add your real API keys
+          // This file is git-ignored to protect your credentials
+          //
+          
+          import Foundation
+          
+          enum Secrets {
+            // Gemini API - Get yours at: https://aistudio.google.com/apikey
+            static let geminiAPIKey = "YOUR_GEMINI_API_KEY"
+            
+            // OpenClaw Gateway Configuration
+            // See: https://github.com/nichochar/openclaw for setup
+            static let openClawHost = "http://YOUR_MAC_HOSTNAME.local"
+            static let openClawPort = 18789
+            static let openClawHookToken = "YOUR_OPENCLAW_HOOK_TOKEN"
+            static let openClawGatewayToken = "YOUR_OPENCLAW_GATEWAY_TOKEN"
+            
+            // WebRTC Signaling Server (optional)
+            static let webrtcSignalingURL = "ws://localhost:8080"
+          }
+          EOF
+          echo "✅ Created Secrets.swift with placeholder values"
+      
+      - name: Cache Swift Package Manager
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+            samples/CameraAccess/CameraAccess.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+      
+      - name: Install SwiftLint
+        run: |
+          echo "📦 Installing SwiftLint..."
+          brew install swiftlint
+          swiftlint version
+      
+      - name: Run SwiftLint
+        run: |
+          echo "🔍 Running SwiftLint (zero warnings enforced)..."
+          swiftlint lint --reporter github-actions-logging
+      
+      - name: Resolve Swift Package Dependencies
+        run: |
+          echo "📦 Resolving Swift Package Manager dependencies..."
+          xcodebuild -resolvePackageDependencies \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME"
+      
+      - name: Build for iOS Device (Validation)
+        run: |
+          echo "🔨 Building iOS app for device..."
+          xcodebuild archive \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath "$GITHUB_WORKSPACE/build/CameraAccess.xcarchive" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build.log \
+            | xcbeautify || true
+          
+          # Check if archive succeeded
+          if [ -d "$GITHUB_WORKSPACE/build/CameraAccess.xcarchive" ]; then
+            echo "✅ Archive created successfully!"
+          else
+            echo "❌ Archive creation failed!"
+            echo "📋 Last 50 lines of build log:"
+            tail -50 build.log
+            exit 1
+          fi
+      
+      - name: Export IPA
+        run: |
+          echo "📦 Exporting IPA..."
+          
+          # Create export options plist for ad-hoc distribution
+          cat > ExportOptions.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>development</string>
+              <key>compileBitcode</key>
+              <false/>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>stripSwiftSymbols</key>
+              <true/>
+              <key>thinning</key>
+              <string>&lt;none&gt;</string>
+          </dict>
+          </plist>
+          EOF
+          
+          # Export the archive to IPA
+          xcodebuild -exportArchive \
+            -archivePath "$GITHUB_WORKSPACE/build/CameraAccess.xcarchive" \
+            -exportPath "$GITHUB_WORKSPACE/build/ipa" \
+            -exportOptionsPlist ExportOptions.plist \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            || echo "Export with signing failed, trying without..."
+          
+          # If export failed, manually create IPA from archive
+          if [ ! -f "$GITHUB_WORKSPACE/build/ipa/CameraAccess.ipa" ]; then
+            echo "Creating IPA manually from archive..."
+            mkdir -p "$GITHUB_WORKSPACE/build/ipa/Payload"
+            cp -r "$GITHUB_WORKSPACE/build/CameraAccess.xcarchive/Products/Applications/CameraAccess.app" \
+                  "$GITHUB_WORKSPACE/build/ipa/Payload/"
+            cd "$GITHUB_WORKSPACE/build/ipa"
+            zip -r CameraAccess.ipa Payload
+            rm -rf Payload
+          fi
+          
+          if [ -f "$GITHUB_WORKSPACE/build/ipa/CameraAccess.ipa" ]; then
+            echo "✅ IPA created successfully!"
+            ls -lh "$GITHUB_WORKSPACE/build/ipa/CameraAccess.ipa"
+          else
+            echo "❌ IPA creation failed!"
+            exit 1
+          fi
+      
+      - name: Upload IPA as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VisionClaw-iPhone-${{ github.sha }}
+          path: build/ipa/CameraAccess.ipa
+          retention-days: 30
+      
+      - name: Check for Swift Warnings (zero warnings enforced)
+        if: success()
+        run: |
+          echo "⚠️  Checking for Swift compiler warnings..."
+          if grep -i "warning:" build.log; then
+            echo "❌ Build produced Swift warnings (zero warnings required)"
+            exit 1
+          fi
+          echo "✅ No Swift warnings"
+      
+      - name: Build Summary
+        if: always()
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f build/ipa/CameraAccess.ipa ]; then
+            echo "✅ **Build Status**: SUCCESS" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "📦 **IPA Created**: VisionClaw-iPhone-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            IPA_SIZE=$(du -h build/ipa/CameraAccess.ipa | cut -f1)
+            echo "**IPA Size**: $IPA_SIZE" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 📲 How to Install on Your iPhone (from Linux):" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Option 1: Using AltStore (Recommended)**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Download AltServer for Linux: https://github.com/NyaMisty/AltServer-Linux" >> $GITHUB_STEP_SUMMARY
+            echo "2. Download the IPA artifact from this build" >> $GITHUB_STEP_SUMMARY
+            echo "3. Connect iPhone via USB" >> $GITHUB_STEP_SUMMARY
+            echo "4. Run: \\\`altserver -u <IPA_FILE>\\\`" >> $GITHUB_STEP_SUMMARY
+            echo "5. Sign in with your Apple ID when prompted" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Option 2: Using Sideloadly**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Install Sideloadly: https://sideloadly.io/" >> $GITHUB_STEP_SUMMARY
+            echo "2. Download the IPA artifact" >> $GITHUB_STEP_SUMMARY
+            echo "3. Connect iPhone and follow Sideloadly GUI" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Option 3: Via Web Browser (Experimental)**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Upload IPA to a web server you control" >> $GITHUB_STEP_SUMMARY
+            echo "2. Create an itms-services:// link with manifest.plist" >> $GITHUB_STEP_SUMMARY
+            echo "3. Open link on iPhone to install (requires HTTPS)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **Note**: Apps sideloaded with free Apple ID expire after 7 days" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Build Status**: FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The build failed. Check the logs above for details." >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Upload Build Logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ github.sha }}
+          path: build.log
+          retention-days: 7

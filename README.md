@@ -1,5 +1,10 @@
 # VisionClaw 🦞+😎
 
+[![iOS Build](https://github.com/DynamicDevices/VisionClaw/actions/workflows/ios-build.yml/badge.svg)](https://github.com/DynamicDevices/VisionClaw/actions/workflows/ios-build.yml)
+[![License](https://img.shields.io/badge/license-Meta%20Developer%20Terms-blue.svg)](LICENSE)
+[![iOS](https://img.shields.io/badge/iOS-17.0%2B-blue.svg)]()
+[![Swift](https://img.shields.io/badge/Swift-5.0-orange.svg)]()
+
 ![VisionClaw](assets/teaserimage.png)
 
 A real-time AI assistant for Meta Ray-Ban smart glasses. See what you see, hear what you say, and take actions on your behalf -- all through voice.
@@ -7,6 +12,8 @@ A real-time AI assistant for Meta Ray-Ban smart glasses. See what you see, hear 
 ![Cover](assets/cover.png)
 
 Built on [Meta Wearables DAT SDK](https://github.com/facebook/meta-wearables-dat-ios) + [Gemini Live API](https://ai.google.dev/gemini-api/docs/live) + [OpenClaw](https://github.com/nichochar/openclaw) (optional).
+
+**📱 Quick Links:** [Development Guide](docs/DEVELOPMENT.md) | [Original Upstream](https://github.com/sseanliu/VisionClaw)
 
 ## What It Does
 
@@ -55,23 +62,81 @@ Gemini Live API (WebSocket)
 
 ## Quick Start
 
-### 1. Clone and open
+### Installing on iPhone (Linux/No Mac Required) 🐧
 
 ```bash
-git clone https://github.com/sseanliu/VisionClaw.git
-cd VisionClaw/samples/CameraAccess
-open CameraAccess.xcodeproj
+git clone git@github.com:DynamicDevices/VisionClaw.git
+cd VisionClaw
+
+# One-command installation to your iPhone!
+./scripts/install-iphone.sh
 ```
 
-### 2. Add your Gemini API key
+This will:
+- ✅ Install all dependencies (AltStore, libimobiledevice, etc.)
+- ✅ Download the latest IPA from GitHub Actions
+- ✅ Sign and install to your iPhone with your Apple ID
+- ✅ No Mac required!
+
+**See:** [docs/INSTALL_FROM_LINUX.md](docs/INSTALL_FROM_LINUX.md) for detailed guide.
+
+---
+
+### Development Setup (macOS Required)
+
+For making code changes, you'll need Xcode on macOS:
+
+```bash
+git clone git@github.com:DynamicDevices/VisionClaw.git
+cd VisionClaw
+
+# Install SwiftLint for code quality (recommended)
+brew install swiftlint
+
+# Install git hooks for automatic linting (optional)
+.github/scripts/install-hooks.sh
+
+# Open project
+open samples/CameraAccess/CameraAccess.xcodeproj
+```
+
+### 2. Configure API Keys
+
+**Option A: QR Code (Easiest - No Rebuild Required!)** 🎯
+
+1. Generate a QR code with your Gemini API key:
+   ```bash
+   ./scripts/generate-config-qr.py --key YOUR_GEMINI_API_KEY
+   ```
+
+2. Install the app on your iPhone (using the pre-built IPA from GitHub Actions)
+
+3. Open VisionClaw → Settings (gear icon) → "Scan QR Code for Config"
+
+4. Point your camera at the generated QR code
+
+5. Tap "Save"
+
+Done! Your API key is now configured without rebuilding. See [QR Code Configuration Guide](docs/QR_CODE_CONFIG.md) for full details.
+
+**Option B: Build from Source (Requires Xcode)**
 
 Get a free API key at [Google AI Studio](https://aistudio.google.com/apikey).
 
-Open `samples/CameraAccess/CameraAccess/Gemini/GeminiConfig.swift` and replace the placeholder:
+Create `samples/CameraAccess/CameraAccess/Secrets.swift` from the template:
+
+```bash
+cp samples/CameraAccess/CameraAccess/Secrets.swift.template \
+   samples/CameraAccess/CameraAccess/Secrets.swift
+```
+
+Then edit `Secrets.swift` and add your API key:
 
 ```swift
-static let apiKey = "YOUR_GEMINI_API_KEY"  // <-- paste your key here
+static let geminiAPIKey = "YOUR_GEMINI_API_KEY"  // <-- paste your key here
 ```
+
+See [Development Guide](docs/DEVELOPMENT.md) for detailed setup instructions.
 
 ### 3. Build and run
 

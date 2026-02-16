@@ -83,44 +83,17 @@ class AudioManager {
     var tapCount = 0
     inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputNativeFormat) { [weak self] buffer, _ in
       guard let self else { return }
-
       tapCount += 1
-      let pcmData: Data
-      let rms: Float
-
-      if let converter {
-        let resampleFormat = AVAudioFormat(
-          commonFormat: .pcmFormatFloat32,
-          sampleRate: GeminiConfig.inputAudioSampleRate,
-          channels: GeminiConfig.audioChannels,
-          interleaved: false
-        )!
-        guard let resampled = self.convertBuffer(buffer, using: converter, targetFormat: resampleFormat) else {
-          if tapCount <= 3 { NSLog("[Audio] Resample failed for tap #%d", tapCount) }
-          return
-        }
-        pcmData = self.float32BufferToInt16Data(resampled)
-        rms = self.computeRMS(resampled)
-      } else {
-        pcmData = self.float32BufferToInt16Data(buffer)
-        rms = self.computeRMS(buffer)
+      guard let pcmData = self.processTapBuffer(buffer, converter: converter, tapCount: tapCount) else {
+        return
       }
-
-      // Log first 3 taps, then every ~2 seconds (every 8th tap at 4096 frames/16kHz = ~256ms each)
-      // if tapCount <= 3 || tapCount % 8 == 0 {
-      //   NSLog("[Audio] Tap #%d: %d frames, %d bytes, rms=%.4f",
-      //         tapCount, buffer.frameLength, pcmData.count, rms)
-      // }
-
-      // Accumulate into ~100ms chunks before sending to Gemini
       self.sendQueue.async {
         self.accumulatedData.append(pcmData)
         if self.accumulatedData.count >= self.minSendBytes {
           let chunk = self.accumulatedData
           self.accumulatedData = Data()
           if tapCount <= 3 {
-            NSLog("[Audio] Sending chunk: %d bytes (~%dms)",
-                  chunk.count, chunk.count / 32)  // 16kHz * 2 bytes = 32 bytes/ms
+            NSLog("[Audio] Sending chunk: %d bytes (~%dms)", chunk.count, chunk.count / 32)
           }
           self.onAudioCaptured?(chunk)
         }
@@ -130,6 +103,27 @@ class AudioManager {
     try audioEngine.start()
     playerNode.play()
     isCapturing = true
+  }
+
+  private func processTapBuffer(
+    _ buffer: AVAudioPCMBuffer,
+    converter: AVAudioConverter?,
+    tapCount: Int
+  ) -> Data? {
+    if let converter {
+      let resampleFormat = AVAudioFormat(
+        commonFormat: .pcmFormatFloat32,
+        sampleRate: GeminiConfig.inputAudioSampleRate,
+        channels: GeminiConfig.audioChannels,
+        interleaved: false
+      )!
+      guard let resampled = convertBuffer(buffer, using: converter, targetFormat: resampleFormat) else {
+        if tapCount <= 3 { NSLog("[Audio] Resample failed for tap #%d", tapCount) }
+        return nil
+      }
+      return float32BufferToInt16Data(resampled)
+    }
+    return float32BufferToInt16Data(buffer)
   }
 
   func playAudio(data: Data) {
@@ -151,8 +145,8 @@ class AudioManager {
     guard let floatData = buffer.floatChannelData else { return }
     data.withUnsafeBytes { rawBuffer in
       guard let int16Ptr = rawBuffer.bindMemory(to: Int16.self).baseAddress else { return }
-      for i in 0..<Int(frameCount) {
-        floatData[0][i] = Float(int16Ptr[i]) / Float(Int16.max)
+      for index in 0..<Int(frameCount) {
+        floatData[0][index] = Float(int16Ptr[index]) / Float(Int16.max)
       }
     }
 
@@ -190,9 +184,9 @@ class AudioManager {
     let frameCount = Int(buffer.frameLength)
     guard frameCount > 0, let floatData = buffer.floatChannelData else { return 0 }
     var sumSquares: Float = 0
-    for i in 0..<frameCount {
-      let s = floatData[0][i]
-      sumSquares += s * s
+    for index in 0..<frameCount {
+      let sample = floatData[0][index]
+      sumSquares += sample * sample
     }
     return sqrt(sumSquares / Float(frameCount))
   }
@@ -201,9 +195,9 @@ class AudioManager {
     let frameCount = Int(buffer.frameLength)
     guard frameCount > 0, let floatData = buffer.floatChannelData else { return Data() }
     var int16Array = [Int16](repeating: 0, count: frameCount)
-    for i in 0..<frameCount {
-      let sample = max(-1.0, min(1.0, floatData[0][i]))
-      int16Array[i] = Int16(sample * Float(Int16.max))
+    for index in 0..<frameCount {
+      let sample = max(-1.0, min(1.0, floatData[0][index]))
+      int16Array[index] = Int16(sample * Float(Int16.max))
     }
     return int16Array.withUnsafeBufferPointer { ptr in
       Data(buffer: ptr)

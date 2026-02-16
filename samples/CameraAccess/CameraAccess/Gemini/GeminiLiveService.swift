@@ -51,7 +51,7 @@ class GeminiLiveService: ObservableObject {
     let result = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
       self.connectContinuation = continuation
 
-      self.delegate.onOpen = { [weak self] protocol_ in
+      self.delegate.onOpen = { [weak self] _ in
         guard let self else { return }
         Task { @MainActor in
           self.connectionState = .settingUp
@@ -127,7 +127,7 @@ class GeminiLiveService: ObservableObject {
           ]
         ]
       ]
-      self?.sendJSON(json)
+      Task { @MainActor in self?.sendJSON(json) }
     }
   }
 
@@ -144,13 +144,13 @@ class GeminiLiveService: ObservableObject {
           ]
         ]
       ]
-      self?.sendJSON(json)
+      Task { @MainActor in self?.sendJSON(json) }
     }
   }
 
   func sendToolResponse(_ response: [String: Any]) {
     sendQueue.async { [weak self] in
-      self?.sendJSON(response)
+      Task { @MainActor in self?.sendJSON(response) }
     }
   }
 

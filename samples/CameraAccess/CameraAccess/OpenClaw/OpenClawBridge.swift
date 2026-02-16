@@ -64,8 +64,8 @@ class OpenClawBridge: ObservableObject {
   }
 
   private static func newSessionKey() -> String {
-    let ts = ISO8601DateFormatter().string(from: Date())
-    return "agent:main:glass:\(ts)"
+    let timestamp = ISO8601DateFormatter().string(from: Date())
+    return "agent:main:glass:\(timestamp)"
   }
 
   // MARK: - Agent Chat (session continuity via x-openclaw-session-key header)
@@ -116,18 +116,12 @@ class OpenClawBridge: ObservableObject {
         return .failure("Agent returned HTTP \(code)")
       }
 
-      if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-         let choices = json["choices"] as? [[String: Any]],
-         let first = choices.first,
-         let message = first["message"] as? [String: Any],
-         let content = message["content"] as? String {
-        // Append assistant response to history for continuity
+      if let content = parseChatContent(from: data) {
         conversationHistory.append(["role": "assistant", "content": content])
         NSLog("[OpenClaw] Agent result: %@", String(content.prefix(200)))
         lastToolCallStatus = .completed(toolName)
         return .success(content)
       }
-
       let raw = String(data: data, encoding: .utf8) ?? "OK"
       conversationHistory.append(["role": "assistant", "content": raw])
       NSLog("[OpenClaw] Agent raw: %@", String(raw.prefix(200)))
@@ -138,5 +132,14 @@ class OpenClawBridge: ObservableObject {
       lastToolCallStatus = .failed(toolName, error.localizedDescription)
       return .failure("Agent error: \(error.localizedDescription)")
     }
+  }
+
+  private func parseChatContent(from data: Data) -> String? {
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let choices = json["choices"] as? [[String: Any]],
+          let first = choices.first,
+          let message = first["message"] as? [String: Any],
+          let content = message["content"] as? String else { return nil }
+    return content
   }
 }
