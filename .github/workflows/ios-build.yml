@@ -175,7 +175,8 @@ jobs:
         if: success()
         run: |
           echo "⚠️  Checking for Swift compiler warnings..."
-          if grep -i "warning:" build.log; then
+          # Exclude App Intents metadata processor message (tooling, not Swift compiler)
+          if grep -i "warning:" build.log | grep -v "appintentsmetadataprocessor\|No AppIntents.framework"; then
             echo "❌ Build produced Swift warnings (zero warnings required)"
             exit 1
           fi
