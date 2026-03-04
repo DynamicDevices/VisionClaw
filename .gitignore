@@ -11,11 +11,3 @@
 # Python
 __pycache__/
 *.pyc
-
-# Android
-samples/CameraAccessAndroid/local.properties
-samples/CameraAccessAndroid/.gradle
-samples/CameraAccessAndroid/build
-samples/CameraAccessAndroid/app/build
-*.apk
-*.aab
